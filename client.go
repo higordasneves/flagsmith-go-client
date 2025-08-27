@@ -470,6 +470,19 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 		c.log.Info("environment updated", "environment", env.APIKey, "updated_at", env.UpdatedAt)
 	}
 
+	c.log.Debug("IdentityOverrides", "len", len(env.IdentityOverrides))
+	for _, override := range env.IdentityOverrides {
+		c.log.Debug("identity override", "identifier", override.Identifier,
+			"IdentityUUID", override.IdentityUUID,
+			"traits len", len(override.IdentityTraits),
+			"features len", len(override.IdentityFeatures),
+		)
+		for _, feature := range override.IdentityFeatures {
+			c.log.Debug("identity override feature", "identifier", override.Identifier,
+				"feature", *feature)
+		}
+	}
+
 	return nil
 }
 
