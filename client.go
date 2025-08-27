@@ -479,7 +479,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 		)
 		for _, feature := range override.IdentityFeatures {
 			c.log.Debug("identity override feature", "identifier", override.Identifier,
-				"feature", *feature)
+				"feature", *feature.Feature, "feature_state", *feature)
 		}
 	}
 
