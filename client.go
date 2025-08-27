@@ -438,6 +438,10 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 		ForceContentType("application/json").
 		Get(c.config.baseURL + "environment-document/")
 
+	if resp != nil {
+		slog.Debug("environment-document response", "link", resp.Header().Get("link"))
+	}
+
 	if err != nil {
 		msg := fmt.Sprintf("flagsmith: error performing request to Flagsmith API: %s", err)
 		f := &FlagsmithAPIError{Msg: msg, Err: err, ResponseStatusCode: resp.StatusCode(), ResponseStatus: resp.Status()}
@@ -471,6 +475,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 	}
 
 	c.log.Debug("IdentityOverrides", "len", len(env.IdentityOverrides))
+	var totalFlags int
 	for _, override := range env.IdentityOverrides {
 		c.log.Debug("identity override", "identifier", override.Identifier,
 			"IdentityUUID", override.IdentityUUID,
@@ -478,10 +483,12 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 			"features len", len(override.IdentityFeatures),
 		)
 		for _, feature := range override.IdentityFeatures {
+			totalFlags++
 			c.log.Debug("identity override feature", "identifier", override.Identifier,
 				"feature", *feature.Feature, "feature_state", *feature)
 		}
 	}
+	c.log.Debug("total flags", "total", totalFlags)
 
 	return nil
 }
