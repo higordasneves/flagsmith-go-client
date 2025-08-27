@@ -3,7 +3,7 @@ package flagsmith_test
 import (
 	"testing"
 
-	flagsmith "github.com/Flagsmith/flagsmith-go-client/v4"
+	flagsmith "github.com/higordasneves/flagsmith-go-client"
 	"github.com/stretchr/testify/assert"
 )
 

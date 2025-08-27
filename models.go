@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/features"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/features"
 
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities/traits"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities/traits"
 )
 
 type Flag struct {

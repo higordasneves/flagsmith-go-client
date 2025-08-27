@@ -7,11 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities/traits"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/segments"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/utils"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/utils/fixtures"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities/traits"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/segments"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/utils"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/utils/fixtures"
 )
 
 const (

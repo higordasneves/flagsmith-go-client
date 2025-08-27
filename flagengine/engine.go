@@ -1,11 +1,11 @@
 package flagengine
 
 import (
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/environments"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/features"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities/traits"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/segments"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/environments"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/features"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities/traits"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/segments"
 )
 
 // GetEnvironmentFeatureStates returns a list of feature states for a given environment.

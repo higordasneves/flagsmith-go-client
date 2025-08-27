@@ -1,8 +1,8 @@
 package projects
 
 import (
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/organisations"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/segments"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/organisations"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/segments"
 )
 
 type ProjectModel struct {

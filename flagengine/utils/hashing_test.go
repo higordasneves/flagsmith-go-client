@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/utils"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/utils"
 )
 
 func TestGetHashedPercentageForObjectIds(t *testing.T) {

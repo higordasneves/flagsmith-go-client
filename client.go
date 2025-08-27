@@ -11,13 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/environments"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/segments"
 	"github.com/go-resty/resty/v2"
+	"github.com/higordasneves/flagsmith-go-client/flagengine"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/environments"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/segments"
 
-	enginetraits "github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities/traits"
+	enginetraits "github.com/higordasneves/flagsmith-go-client/flagengine/identities/traits"
 )
 
 type contextKey string

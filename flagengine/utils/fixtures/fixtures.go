@@ -3,14 +3,14 @@ package fixtures
 import (
 	"time"
 
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/environments"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/features"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/identities/traits"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/organisations"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/projects"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/segments"
-	"github.com/Flagsmith/flagsmith-go-client/v4/flagengine/utils"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/environments"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/features"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/identities/traits"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/organisations"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/projects"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/segments"
+	"github.com/higordasneves/flagsmith-go-client/flagengine/utils"
 )
 
 const (
