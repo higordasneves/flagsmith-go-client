@@ -439,7 +439,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 		Get(c.config.baseURL + "environment-document/")
 
 	if resp != nil {
-		slog.Debug("environment-document response", "link", resp.Header().Get("link"))
+		c.log.Debug("environment-document response", "link", resp.Header().Get("link"))
 	}
 
 	if err != nil {
