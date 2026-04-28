@@ -1236,3 +1236,148 @@ func TestCustomClientOptionsShoudPanic(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractNextPage(t *testing.T) {
+	client := flagsmith.NewClient("test-key")
+
+	testCases := []struct {
+		name     string
+		header   string
+		expected string
+	}{
+		{
+			name:     "valid link header with encoded page_id",
+			header:   "</api/v1/environment-document/?page_id=" + fixtures.PageIDEncoded + ">; rel=\"next\"",
+			expected: fixtures.PageID,
+		},
+		{
+			name:     "empty header returns empty string",
+			header:   "",
+			expected: "",
+		},
+		{
+			name:     "header without page_id returns empty string",
+			header:   "</api/v1/environment-document/>; rel=\"next\"",
+			expected: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := client.ExtractNextPage(tc.header)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestUpdateEnvironmentPaginatesIdentityOverrides(t *testing.T) {
+	// Given
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(fixtures.PaginatedEnvironmentDocumentHandler))
+	defer server.Close()
+
+	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey, flagsmith.WithLocalEvaluation(ctx),
+		flagsmith.WithBaseURL(server.URL+"/api/v1/"),
+		flagsmith.WithLocalEvaluationPageLimit(0))
+
+	// When
+	err := client.UpdateEnvironment(ctx)
+
+	// Then
+	assert.NoError(t, err)
+
+	// Identity from page 1 should be found
+	flags, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifier, nil)
+	assert.NoError(t, err)
+	enabled, err := flags.IsFeatureEnabled(fixtures.Feature1Name)
+	assert.NoError(t, err)
+	assert.False(t, enabled, "identity from page 1 should have overridden feature disabled")
+
+	// Identity from page 2 should also be found
+	flags2, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifierPage2, nil)
+	assert.NoError(t, err)
+	enabled2, err := flags2.IsFeatureEnabled(fixtures.Feature1Name)
+	assert.NoError(t, err)
+	assert.False(t, enabled2, "identity from page 2 should have overridden feature disabled")
+}
+
+func TestUpdateEnvironmentSinglePageNoLinkHeader(t *testing.T) {
+	// Given
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(fixtures.EnvironmentDocumentHandler))
+	defer server.Close()
+
+	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey, flagsmith.WithLocalEvaluation(ctx),
+		flagsmith.WithBaseURL(server.URL+"/api/v1/"))
+
+	// When
+	err := client.UpdateEnvironment(ctx)
+
+	// Then — no pagination, identity from page 1 should still work
+	assert.NoError(t, err)
+
+	flags, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifier, nil)
+	assert.NoError(t, err)
+	enabled, err := flags.IsFeatureEnabled(fixtures.Feature1Name)
+	assert.NoError(t, err)
+	assert.False(t, enabled, "identity override should have feature disabled")
+}
+
+func TestUpdateEnvironmentRespectsPageLimit(t *testing.T) {
+	// Given: server has 2 pages but client is limited to 1 (the default)
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(fixtures.PaginatedEnvironmentDocumentHandler))
+	defer server.Close()
+
+	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey, flagsmith.WithLocalEvaluation(ctx),
+		flagsmith.WithBaseURL(server.URL+"/api/v1/"),
+		flagsmith.WithLocalEvaluationPageLimit(1))
+
+	// When
+	err := client.UpdateEnvironment(ctx)
+	assert.NoError(t, err)
+
+	// Then: page 1 identity is present
+	flags, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifier, nil)
+	assert.NoError(t, err)
+	enabled, err := flags.IsFeatureEnabled(fixtures.Feature1Name)
+	assert.NoError(t, err)
+	assert.False(t, enabled)
+
+	// Page 2 identity must NOT be present — falls back to env default (enabled=true)
+	flags2, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifierPage2, nil)
+	assert.NoError(t, err)
+	enabled2, err := flags2.IsFeatureEnabled(fixtures.Feature1Name)
+	assert.NoError(t, err)
+	assert.True(t, enabled2, "page 2 identity should not have been loaded")
+}
+
+func TestUpdateEnvironmentRespectsMemoryAllocLimit(t *testing.T) {
+	// Given: memory limit of 1 byte — page 2 will always exceed it
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(fixtures.PaginatedEnvironmentDocumentHandler))
+	defer server.Close()
+
+	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey, flagsmith.WithLocalEvaluation(ctx),
+		flagsmith.WithBaseURL(server.URL+"/api/v1/"),
+		flagsmith.WithLocalEvaluationPageLimit(0),
+		flagsmith.WithLocalEvaluationMemoryAllocLimit(1)) // 1 byte — guarantees page 2 is blocked
+
+	// When
+	err := client.UpdateEnvironment(ctx)
+	assert.NoError(t, err)
+
+	// Then: page 1 identity is present (memory limit only blocks appending subsequent pages)
+	flags, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifier, nil)
+	assert.NoError(t, err)
+	enabled, err := flags.IsFeatureEnabled(fixtures.Feature1Name)
+	assert.NoError(t, err)
+	assert.False(t, enabled)
+
+	// Page 2 identity must NOT be present — memory limit blocked the append
+	flags2, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifierPage2, nil)
+	assert.NoError(t, err)
+	enabled2, err := flags2.IsFeatureEnabled(fixtures.Feature1Name)
+	assert.NoError(t, err)
+	assert.True(t, enabled2, "page 2 should have been blocked by memory limit")
+}

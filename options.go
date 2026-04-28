@@ -37,6 +37,8 @@ var _ = []Option{
 	WithSlogLogger(nil),
 	WithRestyClient(nil),
 	WithHTTPClient(nil),
+	WithLocalEvaluationPageLimit(0),
+	WithLocalEvaluationMemoryAllocLimit(0),
 }
 
 func WithBaseURL(url string) Option {
@@ -178,6 +180,28 @@ func WithRealtimeBaseURL(url string) Option {
 			url += "/"
 		}
 		c.config.realtimeBaseUrl = url
+	}
+}
+
+// WithLocalEvaluationPageLimit sets the maximum number of environment-document
+// pages fetched per update cycle. 0 means unlimited. Default is 1 (first page
+// only), which preserves existing behaviour for users that have not opted in to
+// pagination.
+func WithLocalEvaluationPageLimit(limit int) Option {
+	return func(c *Client) {
+		c.config.localEvaluationPageLimit = limit
+	}
+}
+
+// WithLocalEvaluationMemoryAllocLimit sets an upper bound (in bytes) on the
+// total size of identity_overrides accumulated across pages. Size is estimated
+// from the marshaled JSON of each page's identity_overrides slice. When adding
+// a page would exceed the limit the page is skipped and pagination stops. 0
+// means no limit. For MB-based limits use multiples of 1024*1024, e.g.
+// (50 * 1024 * 1024) for 50 MB.
+func WithLocalEvaluationMemoryAllocLimit(bytes int) Option {
+	return func(c *Client) {
+		c.config.localEvaluationMemoryAllocBytes = bytes
 	}
 }
 

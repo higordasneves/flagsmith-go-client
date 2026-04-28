@@ -28,15 +28,26 @@ type config struct {
 	useRealtime        bool
 	polling            bool
 	userProvidedClient bool
+
+	// localEvaluationPageLimit caps how many pages of the environment-document
+	// are fetched per update cycle. 0 means unlimited. Default is 1 (first page only)
+	// to preserve existing behaviour.
+	localEvaluationPageLimit int
+
+	// localEvaluationMemoryAllocBytes is the maximum total size (in bytes, measured
+	// as the marshaled JSON of identity_overrides) that may be accumulated across
+	// pages. 0 means no limit. Use multiples of 1024*1024 for MB-based limits.
+	localEvaluationMemoryAllocBytes int
 }
 
 // defaultConfig returns default configuration.
 func defaultConfig() config {
 	return config{
-		baseURL:            DefaultBaseURL,
-		timeout:            DefaultTimeout,
-		envRefreshInterval: time.Second * 60,
-		realtimeBaseUrl:    DefaultRealtimeBaseUrl,
-		userProvidedClient: false,
+		baseURL:                  DefaultBaseURL,
+		timeout:                  DefaultTimeout,
+		envRefreshInterval:       time.Second * 60,
+		realtimeBaseUrl:          DefaultRealtimeBaseUrl,
+		userProvidedClient:       false,
+		localEvaluationPageLimit: 1,
 	}
 }

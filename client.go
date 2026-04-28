@@ -2,9 +2,11 @@ package flagsmith
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"reflect"
 	"runtime"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine"
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/engine_eval"
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/environments"
+	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/identities"
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/segments"
 	"github.com/go-resty/resty/v2"
 )
@@ -433,28 +436,61 @@ func (c *Client) pollThenStartRealtime(ctx context.Context) {
 
 func (c *Client) UpdateEnvironment(ctx context.Context) error {
 	var env environments.EnvironmentModel
-	resp, err := c.client.NewRequest().
-		SetContext(ctx).
-		SetResult(&env).
-		ForceContentType("application/json").
-		Get(c.config.baseURL + "environment-document/")
+	nextPage := ""
+	pageCount := 0
+	var totalOverridesBytes int
 
-	if err != nil {
-		msg := fmt.Sprintf("flagsmith: error performing request to Flagsmith API: %s", err)
-		f := &FlagsmithAPIError{Msg: msg, Err: err, ResponseStatusCode: resp.StatusCode(), ResponseStatus: resp.Status()}
-		if c.errorHandler != nil {
-			c.errorHandler(f)
+	for {
+		var page environments.EnvironmentModel
+		req := c.client.NewRequest().
+			SetContext(ctx).
+			SetResult(&page).
+			ForceContentType("application/json")
+		if nextPage != "" {
+			req = req.SetQueryParam("page_id", nextPage)
 		}
-		return f
-	}
-	if resp.StatusCode() != 200 {
-		msg := fmt.Sprintf("flagsmith: unexpected response from Flagsmith API: %s", resp.Status())
-		f := &FlagsmithAPIError{Msg: msg, Err: err, ResponseStatusCode: resp.StatusCode(), ResponseStatus: resp.Status()}
-		if c.errorHandler != nil {
-			c.errorHandler(f)
+
+		resp, err := req.Get(c.config.baseURL + "environment-document/")
+		if err != nil {
+			msg := fmt.Sprintf("flagsmith: error performing request to Flagsmith API: %s", err)
+			f := &FlagsmithAPIError{Msg: msg, Err: err, ResponseStatusCode: resp.StatusCode(), ResponseStatus: resp.Status()}
+			if c.errorHandler != nil {
+				c.errorHandler(f)
+			}
+			return f
 		}
-		return f
+		if resp.StatusCode() != 200 {
+			msg := fmt.Sprintf("flagsmith: unexpected response from Flagsmith API: %s", resp.Status())
+			f := &FlagsmithAPIError{Msg: msg, Err: err, ResponseStatusCode: resp.StatusCode(), ResponseStatus: resp.Status()}
+			if c.errorHandler != nil {
+				c.errorHandler(f)
+			}
+			return f
+		}
+
+		pageCount++
+		nextPage = c.ExtractNextPage(resp.Header().Get("link"))
+
+		if pageCount == 1 {
+			env = page
+		} else {
+			ok, newTotal := c.checkEnvironmentMemoryAlloc(page.IdentityOverrides, pageCount, totalOverridesBytes)
+			if !ok {
+				break
+			}
+			totalOverridesBytes = newTotal
+			env.IdentityOverrides = append(env.IdentityOverrides, page.IdentityOverrides...)
+		}
+
+		if nextPage == "" {
+			break
+		}
+		if c.config.localEvaluationPageLimit > 0 && pageCount >= c.config.localEvaluationPageLimit {
+			c.log.Debug("page limit reached, stopping pagination", "limit", c.config.localEvaluationPageLimit)
+			break
+		}
 	}
+
 	isNew := false
 	previousEnv := c.environment.Load()
 	if previousEnv == nil || env.UpdatedAt.After(previousEnv.(*environments.EnvironmentModel).UpdatedAt) {
@@ -469,5 +505,52 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 		c.log.Info("environment updated", "environment", env.APIKey, "updated_at", env.UpdatedAt)
 	}
 
+	c.log.Debug("IdentityOverrides", "len", len(env.IdentityOverrides))
+
 	return nil
+}
+
+// ExtractNextPage parses the Link header from the environment-document API and
+// returns the decoded page_id value when a next page exists, or empty string otherwise.
+// Expected format: </api/v1/environment-document/?page_id=xxx>; rel="next"
+func (c *Client) ExtractNextPage(linkHeader string) string {
+	parts := strings.SplitN(linkHeader, ">", 2)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	u, err := url.Parse(strings.TrimPrefix(parts[0], "<"))
+	if err != nil {
+		return ""
+	}
+
+	pageID := u.Query().Get("page_id")
+	c.log.Debug("environment-document next page", "link", linkHeader, "page_id", pageID)
+
+	return pageID
+}
+
+// checkEnvironmentMemoryAlloc checks whether appending a new page's identity overrides
+// would exceed the configured byte limit. Returns ok=false and the unchanged
+// accumulated total when the limit would be breached; otherwise returns ok=true
+// and the updated total. When no limit is configured (0) it always returns ok=true.
+func (c *Client) checkEnvironmentMemoryAlloc(overrides []*identities.IdentityModel, pageCount, accumulated int) (ok bool, newTotal int) {
+	if c.config.localEvaluationMemoryAllocBytes == 0 {
+		return true, accumulated
+	}
+
+	pageBytes, err := json.Marshal(overrides)
+	if err != nil {
+		return true, accumulated
+	}
+	newTotal = accumulated + len(pageBytes)
+	if newTotal > c.config.localEvaluationMemoryAllocBytes {
+		c.log.Warn("memory limit reached, skipping page",
+			"page", pageCount,
+			"limit_bytes", c.config.localEvaluationMemoryAllocBytes,
+			"accumulated_bytes", accumulated,
+		)
+		return false, accumulated
+	}
+	return true, newTotal
 }
