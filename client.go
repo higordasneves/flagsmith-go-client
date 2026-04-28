@@ -2,7 +2,6 @@ package flagsmith
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine"
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/engine_eval"
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/environments"
-	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/identities"
 	"github.com/Flagsmith/flagsmith-go-client/v5/flagengine/segments"
 	"github.com/go-resty/resty/v2"
 )
@@ -435,10 +433,11 @@ func (c *Client) pollThenStartRealtime(ctx context.Context) {
 }
 
 func (c *Client) UpdateEnvironment(ctx context.Context) error {
+	start := time.Now()
+
 	var env environments.EnvironmentModel
 	nextPage := ""
 	pageCount := 0
-	var totalOverridesBytes int
 
 	for {
 		var page environments.EnvironmentModel
@@ -474,19 +473,10 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 		if pageCount == 1 {
 			env = page
 		} else {
-			ok, newTotal := c.checkEnvironmentMemoryAlloc(page.IdentityOverrides, pageCount, totalOverridesBytes)
-			if !ok {
-				break
-			}
-			totalOverridesBytes = newTotal
 			env.IdentityOverrides = append(env.IdentityOverrides, page.IdentityOverrides...)
 		}
 
 		if nextPage == "" {
-			break
-		}
-		if c.config.localEvaluationPageLimit > 0 && pageCount >= c.config.localEvaluationPageLimit {
-			c.log.Debug("page limit reached, stopping pagination", "limit", c.config.localEvaluationPageLimit)
 			break
 		}
 	}
@@ -506,6 +496,14 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 	}
 
 	c.log.Debug("IdentityOverrides", "len", len(env.IdentityOverrides))
+
+	if elapsed := time.Since(start); c.config.envRefreshInterval > 0 && elapsed > c.config.envRefreshInterval {
+		c.log.Warn(
+			"fetching environment took longer than the configured refresh interval; raise WithEnvironmentRefreshInterval or trim the environment",
+			"elapsed", elapsed,
+			"refresh_interval", c.config.envRefreshInterval,
+		)
+	}
 
 	return nil
 }
@@ -528,29 +526,4 @@ func (c *Client) ExtractNextPage(linkHeader string) string {
 	c.log.Debug("environment-document next page", "link", linkHeader, "page_id", pageID)
 
 	return pageID
-}
-
-// checkEnvironmentMemoryAlloc checks whether appending a new page's identity overrides
-// would exceed the configured byte limit. Returns ok=false and the unchanged
-// accumulated total when the limit would be breached; otherwise returns ok=true
-// and the updated total. When no limit is configured (0) it always returns ok=true.
-func (c *Client) checkEnvironmentMemoryAlloc(overrides []*identities.IdentityModel, pageCount, accumulated int) (ok bool, newTotal int) {
-	if c.config.localEvaluationMemoryAllocBytes == 0 {
-		return true, accumulated
-	}
-
-	pageBytes, err := json.Marshal(overrides)
-	if err != nil {
-		return true, accumulated
-	}
-	newTotal = accumulated + len(pageBytes)
-	if newTotal > c.config.localEvaluationMemoryAllocBytes {
-		c.log.Warn("memory limit reached, skipping page",
-			"page", pageCount,
-			"limit_bytes", c.config.localEvaluationMemoryAllocBytes,
-			"accumulated_bytes", accumulated,
-		)
-		return false, accumulated
-	}
-	return true, newTotal
 }

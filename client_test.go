@@ -1277,8 +1277,7 @@ func TestUpdateEnvironmentPaginatesIdentityOverrides(t *testing.T) {
 	defer server.Close()
 
 	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey, flagsmith.WithLocalEvaluation(ctx),
-		flagsmith.WithBaseURL(server.URL+"/api/v1/"),
-		flagsmith.WithLocalEvaluationPageLimit(0))
+		flagsmith.WithBaseURL(server.URL+"/api/v1/"))
 
 	// When
 	err := client.UpdateEnvironment(ctx)
@@ -1323,61 +1322,72 @@ func TestUpdateEnvironmentSinglePageNoLinkHeader(t *testing.T) {
 	assert.False(t, enabled, "identity override should have feature disabled")
 }
 
-func TestUpdateEnvironmentRespectsPageLimit(t *testing.T) {
-	// Given: server has 2 pages but client is limited to 1 (the default)
+func TestUpdateEnvironmentLogsWarningWhenSlowerThanRefreshInterval(t *testing.T) {
+	// Given: handler delays the response so the fetch takes longer than the
+	// refresh interval; we capture logs to assert the warning is emitted.
 	ctx := context.Background()
-	server := httptest.NewServer(http.HandlerFunc(fixtures.PaginatedEnvironmentDocumentHandler))
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		time.Sleep(20 * time.Millisecond)
+		fixtures.EnvironmentDocumentHandler(rw, req)
+	}))
 	defer server.Close()
 
-	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey, flagsmith.WithLocalEvaluation(ctx),
+	var logOutput strings.Builder
+	var logMu sync.Mutex
+	slogLogger := slog.New(slog.NewTextHandler(writerFunc(func(p []byte) (n int, err error) {
+		logMu.Lock()
+		defer logMu.Unlock()
+		return logOutput.Write(p)
+	}), &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey,
+		flagsmith.WithSlogLogger(slogLogger),
 		flagsmith.WithBaseURL(server.URL+"/api/v1/"),
-		flagsmith.WithLocalEvaluationPageLimit(1))
+		flagsmith.WithEnvironmentRefreshInterval(1*time.Millisecond))
 
 	// When
 	err := client.UpdateEnvironment(ctx)
+
+	// Then
 	assert.NoError(t, err)
 
-	// Then: page 1 identity is present
-	flags, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifier, nil)
-	assert.NoError(t, err)
-	enabled, err := flags.IsFeatureEnabled(fixtures.Feature1Name)
-	assert.NoError(t, err)
-	assert.False(t, enabled)
+	logMu.Lock()
+	logStr := logOutput.String()
+	logMu.Unlock()
 
-	// Page 2 identity must NOT be present — falls back to env default (enabled=true)
-	flags2, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifierPage2, nil)
-	assert.NoError(t, err)
-	enabled2, err := flags2.IsFeatureEnabled(fixtures.Feature1Name)
-	assert.NoError(t, err)
-	assert.True(t, enabled2, "page 2 identity should not have been loaded")
+	assert.Contains(t, logStr, "fetching environment took longer than the configured refresh interval")
+	assert.Contains(t, logStr, "refresh_interval=1ms")
+	assert.Contains(t, logStr, "elapsed=")
 }
 
-func TestUpdateEnvironmentRespectsMemoryAllocLimit(t *testing.T) {
-	// Given: memory limit of 1 byte — page 2 will always exceed it
+func TestUpdateEnvironmentDoesNotLogWarningWhenWithinRefreshInterval(t *testing.T) {
+	// Given
 	ctx := context.Background()
-	server := httptest.NewServer(http.HandlerFunc(fixtures.PaginatedEnvironmentDocumentHandler))
+	server := httptest.NewServer(http.HandlerFunc(fixtures.EnvironmentDocumentHandler))
 	defer server.Close()
 
-	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey, flagsmith.WithLocalEvaluation(ctx),
+	var logOutput strings.Builder
+	var logMu sync.Mutex
+	slogLogger := slog.New(slog.NewTextHandler(writerFunc(func(p []byte) (n int, err error) {
+		logMu.Lock()
+		defer logMu.Unlock()
+		return logOutput.Write(p)
+	}), &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	client := flagsmith.NewClient(fixtures.EnvironmentAPIKey,
+		flagsmith.WithSlogLogger(slogLogger),
 		flagsmith.WithBaseURL(server.URL+"/api/v1/"),
-		flagsmith.WithLocalEvaluationPageLimit(0),
-		flagsmith.WithLocalEvaluationMemoryAllocLimit(1)) // 1 byte — guarantees page 2 is blocked
+		flagsmith.WithEnvironmentRefreshInterval(10*time.Second))
 
 	// When
 	err := client.UpdateEnvironment(ctx)
+
+	// Then
 	assert.NoError(t, err)
 
-	// Then: page 1 identity is present (memory limit only blocks appending subsequent pages)
-	flags, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifier, nil)
-	assert.NoError(t, err)
-	enabled, err := flags.IsFeatureEnabled(fixtures.Feature1Name)
-	assert.NoError(t, err)
-	assert.False(t, enabled)
+	logMu.Lock()
+	logStr := logOutput.String()
+	logMu.Unlock()
 
-	// Page 2 identity must NOT be present — memory limit blocked the append
-	flags2, err := client.GetIdentityFlags(ctx, fixtures.OverriddenIdentifierPage2, nil)
-	assert.NoError(t, err)
-	enabled2, err := flags2.IsFeatureEnabled(fixtures.Feature1Name)
-	assert.NoError(t, err)
-	assert.True(t, enabled2, "page 2 should have been blocked by memory limit")
+	assert.NotContains(t, logStr, "fetching environment took longer")
 }
