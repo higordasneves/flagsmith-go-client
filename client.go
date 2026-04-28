@@ -510,7 +510,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context) error {
 
 // ExtractNextPage parses the Link header from the environment-document API and
 // returns the decoded page_id value when a next page exists, or empty string otherwise.
-// Expected format: </api/v1/environment-document/?page_id=xxx>; rel="next"
+// Expected format: </api/v1/environment-document/?page_id=xxx>; rel="next".
 func (c *Client) ExtractNextPage(linkHeader string) string {
 	parts := strings.SplitN(linkHeader, ">", 2)
 	if len(parts) == 0 {
